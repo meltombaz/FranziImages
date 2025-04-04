@@ -2,49 +2,52 @@ import os
 import numpy as np
 import streamlit as st
 import imageio.v2 as imageio
-from glob import glob
 from collections import defaultdict
 from skimage.transform import resize
 from PIL import Image
+import tempfile
 
+st.set_page_config(page_title="TIFF Channel Overlay", layout="centered")
 st.title("🔬 TIFF Channel Overlay Generator")
 
-# Folder uploader
-folder = st.text_input("📂 Enter full path to folder with TIFF files:", "")
+uploaded_files = st.file_uploader("📤 Upload your DAPI / EGFP / RFP TIFF files", 
+                                   type=["tif", "tiff"], 
+                                   accept_multiple_files=True)
 
-if folder and os.path.exists(folder):
-    tif_files = sorted(glob(os.path.join(folder, "*.tif")))
+if uploaded_files:
+    image_groups = defaultdict(dict)
 
-    if not tif_files:
-        st.warning("No .tif files found in the selected folder.")
-    else:
-        image_groups = defaultdict(dict)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        st.write(f"📁 Working in temporary directory...")
 
-        for file in tif_files:
-            fname = os.path.basename(file)
+        # Save uploaded files temporarily
+        for uploaded in uploaded_files:
+            save_path = os.path.join(temp_dir, uploaded.name)
+            with open(save_path, "wb") as f:
+                f.write(uploaded.read())
+
+        # Parse and group
+        for fname in os.listdir(temp_dir):
+            if not fname.lower().endswith((".tif", ".tiff")):
+                continue
             parts = fname.split('_', 1)
             if len(parts) != 2:
-                continue  # skip if format doesn't match
-
+                continue
             channel, identifier_with_ext = parts
             identifier = os.path.splitext(identifier_with_ext)[0]
             channel = channel.upper()
 
+            file_path = os.path.join(temp_dir, fname)
             if 'DAPI' in channel:
-                image_groups[identifier]['blue'] = file
+                image_groups[identifier]['blue'] = file_path
             elif 'EGFP' in channel or 'GFP' in channel:
-                image_groups[identifier]['green'] = file
+                image_groups[identifier]['green'] = file_path
             elif 'RFP' in channel:
-                image_groups[identifier]['red'] = file
+                image_groups[identifier]['red'] = file_path
 
-        # Output folder
-        output_folder = os.path.join(folder, "merged_overlays")
-        os.makedirs(output_folder, exist_ok=True)
-
-        merged_images = []
+        overlays = []
 
         for identifier, channels in image_groups.items():
-            # Determine image shape
             target_shape = None
             for c in channels.values():
                 img = imageio.imread(c)
@@ -66,15 +69,20 @@ if folder and os.path.exists(folder):
                     channel_idx = {'red': 0, 'green': 1, 'blue': 2}[color]
                     rgb[:, :, channel_idx] = img
 
-            out_path = os.path.join(output_folder, f"{identifier}_overlay.png")
+            out_path = os.path.join(temp_dir, f"{identifier}_overlay.png")
             imageio.imwrite(out_path, rgb)
-            merged_images.append((identifier, out_path))
+            overlays.append((identifier, out_path))
 
-        st.success(f"✅ Done! {len(merged_images)} overlays saved to: {output_folder}")
+        st.success(f"✅ {len(overlays)} overlays generated!")
 
-        with st.expander("📸 Preview Merged Images"):
-            for identifier, path in merged_images:
-                st.image(Image.open(path), caption=f"{identifier}_overlay", use_column_width=True)
-
+        for identifier, path in overlays:
+            st.image(Image.open(path), caption=f"{identifier}_overlay", use_column_width=True)
+            with open(path, "rb") as f:
+                st.download_button(
+                    label=f"💾 Download {identifier}_overlay.png",
+                    data=f.read(),
+                    file_name=f"{identifier}_overlay.png",
+                    mime="image/png"
+                )
 else:
-    st.info("👆 Please enter a valid folder path.")
+    st.info("👆 Upload at least two or more TIFF images (named like DAPI_*, EGFP_*, RFP_*)")
