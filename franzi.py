@@ -10,7 +10,7 @@ from PIL import Image
 import tempfile
 
 st.set_page_config(page_title="TIFF Channel Overlay", layout="wide")
-st.title("🔬 TIFF Channel Overlay Generator")
+st.title("🔬 TIFF Channel Overlay Generator 🌸")
 
 uploaded_files = st.file_uploader(
     "📤 Upload DAPI / EGFP / RFP TIFF files (e.g., random_DAPI_abcd1234efgh.tif)",
@@ -18,14 +18,14 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
-# 🧽 Background removal function
+# 🧽 Background removal using morphological opening
 def remove_background(img, radius=15):
     background = opening(img, disk(radius))
     img_corrected = img - background
     img_corrected[img_corrected < 0] = 0
     return img_corrected
 
-# 📂 Extract channel and 12-char sample identifier
+# 📂 Extract channel and 12-character identifier from filename
 def get_channel_and_identifier(filename):
     match = re.search(r"(DAPI|EGFP|GFP|RFP).*?([A-Za-z0-9]{12})\.tif{1,2}$", filename, re.IGNORECASE)
     if match:
@@ -40,13 +40,13 @@ if uploaded_files:
     with tempfile.TemporaryDirectory() as temp_dir:
         st.write("📁 Processing in temporary workspace...")
 
-        # Save files
+        # Save uploaded files to temp
         for uploaded in uploaded_files:
             save_path = os.path.join(temp_dir, uploaded.name)
             with open(save_path, "wb") as f:
                 f.write(uploaded.read())
 
-        # Group by identifier
+        # Group by 12-char sample identifier
         for fname in os.listdir(temp_dir):
             if not fname.lower().endswith((".tif", ".tiff")):
                 continue
@@ -66,7 +66,7 @@ if uploaded_files:
             if not any(c in channels for c in ['red', 'green', 'blue']):
                 continue
 
-            # Determine target shape
+            # Get image shape from first available channel
             target_shape = None
             for c in channels.values():
                 img = imageio.imread(c)
@@ -86,7 +86,7 @@ if uploaded_files:
                     if img.shape != target_shape:
                         img = resize(img, target_shape, preserve_range=True, anti_aliasing=True)
 
-                    # 🧽 Background removal before normalization
+                    # Remove background and normalize
                     img = remove_background(img)
                     if img.max() > 0:
                         img_norm = (img / img.max() * 255).astype(np.uint8)
@@ -96,7 +96,7 @@ if uploaded_files:
                     channel_idx = {'red': 0, 'green': 1, 'blue': 2}[color]
                     rgb[:, :, channel_idx] = img_norm
 
-                    # Save individual channel image
+                    # Create pseudo-colored image
                     channel_img = np.zeros((*target_shape, 3), dtype=np.uint8)
                     channel_img[:, :, channel_idx] = img_norm
                     colored_channels[color] = Image.fromarray(channel_img)
@@ -118,8 +118,18 @@ if uploaded_files:
 
             cols[3].image(merged_image, caption="🧬 Merged Overlay", use_container_width=True)
 
+            # Add download button
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                merged_image.save(tmp.name)
+                with open(tmp.name, "rb") as f:
+                    cols[3].download_button(
+                        label="💾 Download Overlay",
+                        data=f.read(),
+                        file_name=f"{identifier}_overlay.png",
+                        mime="image/png"
+                    )
 else:
-    st.info("👆 Upload TIFF files with names like `random_DAPI_abcd1234efgh.tif`, `random_EGFP_abcd1234efgh.tif`, etc.")
+    st.info("👆 Upload TIFF files with names like `random_DAPI_abcd1234efgh.tif`, `random_EGFP_abcd1234efgh.tif`, etc.`")
 
 # Footer
 st.markdown(
