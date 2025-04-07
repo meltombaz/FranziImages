@@ -69,7 +69,7 @@ if uploaded_files:
                     channel_idx = {'red': 0, 'green': 1, 'blue': 2}[color]
                     rgb[:, :, channel_idx] = img_norm
 
-                    # Make a pseudo-colored version for preview
+                    # For preview of individual channels
                     color_img = np.zeros((*target_shape, 3), dtype=np.uint8)
                     color_img[:, :, channel_idx] = img_norm
                     colored_channels[color] = Image.fromarray(color_img)
@@ -87,9 +87,9 @@ if uploaded_files:
 
             for i, color in enumerate(['red', 'green', 'blue']):
                 if color in colored_channels:
-                    cols[i].image(colored_channels[color], caption=f"{color.upper()} Channel", use_column_width=True)
+                    cols[i].image(colored_channels[color], caption=f"{color.upper()} Channel", use_container_width=True)
 
-            cols[-1].image(merged_image, caption="🧬 Merged Overlay", use_column_width=True)
+            cols[-1].image(merged_image, caption="🧬 Merged Overlay", use_container_width=True)
 
             with open(merged_path, "rb") as f:
                 st.download_button(
