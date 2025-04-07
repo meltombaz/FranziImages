@@ -104,3 +104,13 @@ if uploaded_files:
             cols[3].image(merged_image, caption="🧬 Merged Overlay", use_container_width=True)
 else:
     st.info("👆 Upload TIFF files with names like `random_DAPI_abcd1234efgh.tif`, `random_EGFP_abcd1234efgh.tif`, etc.")
+
+st.markdown(
+    """
+    <hr style="margin-top: 3em;">
+    <div style='text-align: center; color: gray;'>
+        Created by <a href="https://github.com/meltombaz" target="_blank" style="text-decoration: none; color: #4F8BF9;">meltombaz</a>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
