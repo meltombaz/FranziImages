@@ -12,6 +12,9 @@ import tempfile
 st.set_page_config(page_title="TIFF Channel Overlay", layout="wide")
 st.title("🔬 TIFF Channel Overlay Generator 🤓")
 
+st.warning("⚠️ Please do not upload too many files at once. For optimal performance, keep it to **10 samples max** (i.e., ~30 TIFF files).")
+
+
 uploaded_files = st.file_uploader(
     "📤 Upload DAPI / EGFP / RFP TIFF files (e.g., random_DAPI_abcd1234efgh.tif)",
     type=["tif", "tiff"],
