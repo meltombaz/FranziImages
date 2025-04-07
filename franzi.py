@@ -10,7 +10,7 @@ from PIL import Image
 import tempfile
 
 st.set_page_config(page_title="TIFF Channel Overlay", layout="wide")
-st.title("🔬 TIFF Channel Overlay Generator")
+st.title("🔬 TIFF Channel Overlay Generator 🤓")
 
 uploaded_files = st.file_uploader(
     "📤 Upload DAPI / EGFP / RFP TIFF files (e.g., random_DAPI_abcd1234efgh.tif)",
