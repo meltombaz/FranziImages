@@ -5,6 +5,7 @@ import streamlit as st
 import imageio.v2 as imageio
 from collections import defaultdict
 from skimage.transform import resize
+from skimage.morphology import opening, disk
 from PIL import Image
 import tempfile
 
@@ -17,8 +18,15 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
+# 🧽 Background removal function
+def remove_background(img, radius=15):
+    background = opening(img, disk(radius))
+    img_corrected = img - background
+    img_corrected[img_corrected < 0] = 0
+    return img_corrected
+
+# 📂 Extract channel and 12-char sample identifier
 def get_channel_and_identifier(filename):
-    """Extract channel and 12-char identifier from filename"""
     match = re.search(r"(DAPI|EGFP|GFP|RFP).*?([A-Za-z0-9]{12})\.tif{1,2}$", filename, re.IGNORECASE)
     if match:
         channel = match.group(1).upper()
@@ -32,25 +40,25 @@ if uploaded_files:
     with tempfile.TemporaryDirectory() as temp_dir:
         st.write("📁 Processing in temporary workspace...")
 
-        # Save uploaded files
+        # Save files
         for uploaded in uploaded_files:
             save_path = os.path.join(temp_dir, uploaded.name)
             with open(save_path, "wb") as f:
                 f.write(uploaded.read())
 
-        # Group files by identifier
+        # Group by identifier
         for fname in os.listdir(temp_dir):
             if not fname.lower().endswith((".tif", ".tiff")):
                 continue
             channel, identifier = get_channel_and_identifier(fname)
             if channel and identifier:
-                file_path = os.path.join(temp_dir, fname)
+                path = os.path.join(temp_dir, fname)
                 if 'DAPI' in channel:
-                    image_groups[identifier]['blue'] = file_path
+                    image_groups[identifier]['blue'] = path
                 elif 'EGFP' in channel or 'GFP' in channel:
-                    image_groups[identifier]['green'] = file_path
+                    image_groups[identifier]['green'] = path
                 elif 'RFP' in channel:
-                    image_groups[identifier]['red'] = file_path
+                    image_groups[identifier]['red'] = path
 
         overlays = []
 
@@ -58,7 +66,7 @@ if uploaded_files:
             if not any(c in channels for c in ['red', 'green', 'blue']):
                 continue
 
-            # Load first channel to determine shape
+            # Determine target shape
             target_shape = None
             for c in channels.values():
                 img = imageio.imread(c)
@@ -77,17 +85,22 @@ if uploaded_files:
                         img = img[:, :, 0]
                     if img.shape != target_shape:
                         img = resize(img, target_shape, preserve_range=True, anti_aliasing=True)
-                    img_norm = (img / img.max() * 255).astype(np.uint8)
+
+                    # 🧽 Background removal before normalization
+                    img = remove_background(img)
+                    if img.max() > 0:
+                        img_norm = (img / img.max() * 255).astype(np.uint8)
+                    else:
+                        img_norm = img.astype(np.uint8)
 
                     channel_idx = {'red': 0, 'green': 1, 'blue': 2}[color]
                     rgb[:, :, channel_idx] = img_norm
 
-                    # For display
+                    # Save individual channel image
                     channel_img = np.zeros((*target_shape, 3), dtype=np.uint8)
                     channel_img[:, :, channel_idx] = img_norm
                     colored_channels[color] = Image.fromarray(channel_img)
 
-            # Save merged image
             merged_img = Image.fromarray(rgb)
             overlays.append((identifier, colored_channels, merged_img))
 
@@ -96,15 +109,19 @@ if uploaded_files:
         for identifier, colored_channels, merged_image in overlays:
             st.markdown(f"### 🧪 `{identifier}`")
             cols = st.columns(4)
+
             for i, color in enumerate(['red', 'green', 'blue']):
                 if color in colored_channels:
                     cols[i].image(colored_channels[color], caption=f"{color.upper()} Channel", use_container_width=True)
                 else:
                     cols[i].markdown(f"❌ No {color.upper()} channel")
+
             cols[3].image(merged_image, caption="🧬 Merged Overlay", use_container_width=True)
+
 else:
     st.info("👆 Upload TIFF files with names like `random_DAPI_abcd1234efgh.tif`, `random_EGFP_abcd1234efgh.tif`, etc.")
 
+# Footer
 st.markdown(
     """
     <hr style="margin-top: 3em;">
