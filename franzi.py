@@ -10,7 +10,7 @@ from PIL import Image
 import tempfile
 
 st.set_page_config(page_title="TIFF Channel Overlay", layout="wide")
-st.title("🔬 TIFF Channel Overlay Generator 🌸")
+st.title("🔬 TIFF Channel Overlay Generator")
 
 uploaded_files = st.file_uploader(
     "📤 Upload DAPI / EGFP / RFP TIFF files (e.g., random_DAPI_abcd1234efgh.tif)",
@@ -34,19 +34,18 @@ def get_channel_and_identifier(filename):
         return channel, identifier
     return None, None
 
-if uploaded_files:
+# 🚀 Cached processing function to avoid reruns on download
+@st.cache_resource(show_spinner="🔄 Processing TIFF images...")
+def process_images(uploaded_files):
     image_groups = defaultdict(dict)
+    overlays = []
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        st.write("📁 Processing in temporary workspace...")
-
-        # Save uploaded files to temp
         for uploaded in uploaded_files:
             save_path = os.path.join(temp_dir, uploaded.name)
             with open(save_path, "wb") as f:
                 f.write(uploaded.read())
 
-        # Group by 12-char sample identifier
         for fname in os.listdir(temp_dir):
             if not fname.lower().endswith((".tif", ".tiff")):
                 continue
@@ -60,13 +59,11 @@ if uploaded_files:
                 elif 'RFP' in channel:
                     image_groups[identifier]['red'] = path
 
-        overlays = []
-
         for identifier, channels in image_groups.items():
             if not any(c in channels for c in ['red', 'green', 'blue']):
                 continue
 
-            # Get image shape from first available channel
+            # Determine shape from first available image
             target_shape = None
             for c in channels.values():
                 img = imageio.imread(c)
@@ -96,7 +93,7 @@ if uploaded_files:
                     channel_idx = {'red': 0, 'green': 1, 'blue': 2}[color]
                     rgb[:, :, channel_idx] = img_norm
 
-                    # Create pseudo-colored image
+                    # Pseudo-colored image for display
                     channel_img = np.zeros((*target_shape, 3), dtype=np.uint8)
                     channel_img[:, :, channel_idx] = img_norm
                     colored_channels[color] = Image.fromarray(channel_img)
@@ -104,34 +101,39 @@ if uploaded_files:
             merged_img = Image.fromarray(rgb)
             overlays.append((identifier, colored_channels, merged_img))
 
-        st.success(f"✅ {len(overlays)} overlays generated!")
+    return overlays
 
-        for identifier, colored_channels, merged_image in overlays:
-            st.markdown(f"### 🧪 `{identifier}`")
-            cols = st.columns(4)
+# 🚀 Main logic
+if uploaded_files:
+    overlays = process_images(uploaded_files)
+    st.success(f"✅ {len(overlays)} overlays generated!")
 
-            for i, color in enumerate(['red', 'green', 'blue']):
-                if color in colored_channels:
-                    cols[i].image(colored_channels[color], caption=f"{color.upper()} Channel", use_container_width=True)
-                else:
-                    cols[i].markdown(f"❌ No {color.upper()} channel")
+    for identifier, colored_channels, merged_image in overlays:
+        st.markdown(f"### 🧪 `{identifier}`")
+        cols = st.columns(4)
 
-            cols[3].image(merged_image, caption="🧬 Merged Overlay", use_container_width=True)
+        for i, color in enumerate(['red', 'green', 'blue']):
+            if color in colored_channels:
+                cols[i].image(colored_channels[color], caption=f"{color.upper()} Channel", use_container_width=True)
+            else:
+                cols[i].markdown(f"❌ No {color.upper()} channel")
 
-            # Add download button
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                merged_image.save(tmp.name)
-                with open(tmp.name, "rb") as f:
-                    cols[3].download_button(
-                        label="💾 Download Overlay",
-                        data=f.read(),
-                        file_name=f"{identifier}_overlay.png",
-                        mime="image/png"
-                    )
+        cols[3].image(merged_image, caption="🧬 Merged Overlay", use_container_width=True)
+
+        # ⬇️ Download button under overlay
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+            merged_image.save(tmp.name)
+            with open(tmp.name, "rb") as f:
+                cols[3].download_button(
+                    label="💾 Download Overlay",
+                    data=f.read(),
+                    file_name=f"{identifier}_overlay.png",
+                    mime="image/png"
+                )
 else:
     st.info("👆 Upload TIFF files with names like `random_DAPI_abcd1234efgh.tif`, `random_EGFP_abcd1234efgh.tif`, etc.`")
 
-# Footer
+# 🐙 Footer with GitHub credit
 st.markdown(
     """
     <hr style="margin-top: 3em;">
